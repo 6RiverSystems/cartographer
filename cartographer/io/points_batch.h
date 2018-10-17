@@ -19,6 +19,7 @@
 
 #include <array>
 #include <cstdint>
+#include <unordered_set>
 #include <vector>
 
 #include "Eigen/Core"
@@ -36,8 +37,8 @@ struct PointsBatch {
     trajectory_id = 0;
   }
 
-  // Time at which this batch has been acquired.
-  common::Time time;
+  // Time at which the first point of this batch has been acquired.
+  common::Time start_time;
 
   // Origin of the data, i.e. the location of the sensor in the world at
   // 'time'.
@@ -45,12 +46,12 @@ struct PointsBatch {
 
   // Sensor that generated this data's 'frame_id' or empty if this information
   // is unknown.
-  string frame_id;
+  std::string frame_id;
 
   // Trajectory ID that produced this point.
   int trajectory_id;
 
-  // Geometry of the points in a metric frame.
+  // Geometry of the points in the map frame.
   std::vector<Eigen::Vector3f> points;
 
   // Intensities are optional and may be unspecified. The meaning of these
@@ -61,11 +62,11 @@ struct PointsBatch {
   std::vector<float> intensities;
 
   // Colors are optional. If set, they are RGB values.
-  std::vector<Color> colors;
+  std::vector<FloatColor> colors;
 };
 
 // Removes the indices in 'to_remove' from 'batch'.
-void RemovePoints(std::vector<int> to_remove, PointsBatch* batch);
+void RemovePoints(std::unordered_set<int> to_remove, PointsBatch* batch);
 
 }  // namespace io
 }  // namespace cartographer

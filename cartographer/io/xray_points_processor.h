@@ -23,9 +23,9 @@
 #include "cartographer/common/lua_parameter_dictionary.h"
 #include "cartographer/io/file_writer.h"
 #include "cartographer/io/points_processor.h"
+#include "cartographer/mapping/3d/hybrid_grid.h"
 #include "cartographer/mapping/detect_floors.h"
 #include "cartographer/mapping/proto/trajectory.pb.h"
-#include "cartographer/mapping_3d/hybrid_grid.h"
 #include "cartographer/transform/rigid_transform.h"
 
 namespace cartographer {
@@ -40,7 +40,8 @@ class XRayPointsProcessor : public PointsProcessor {
   XRayPointsProcessor(
       double voxel_size, const transform::Rigid3f& transform,
       const std::vector<mapping::Floor>& floors,
-      const DrawTrajectories& draw_trajectories, const string& output_filename,
+      const DrawTrajectories& draw_trajectories,
+      const std::string& output_filename,
       const std::vector<mapping::proto::Trajectory>& trajectories,
       FileWriterFactory file_writer_factory, PointsProcessor* next);
 
@@ -58,14 +59,14 @@ class XRayPointsProcessor : public PointsProcessor {
 
  private:
   struct ColumnData {
-    double sum_r = 0.;
-    double sum_g = 0.;
-    double sum_b = 0.;
+    float sum_r = 0.;
+    float sum_g = 0.;
+    float sum_b = 0.;
     uint32_t count = 0;
   };
 
   struct Aggregation {
-    mapping_3d::HybridGridBase<bool> voxels;
+    mapping::HybridGridBase<bool> voxels;
     std::map<std::pair<int, int>, ColumnData> column_data;
   };
 
@@ -81,7 +82,7 @@ class XRayPointsProcessor : public PointsProcessor {
   // If empty, we do not separate into floors.
   std::vector<mapping::Floor> floors_;
 
-  const string output_filename_;
+  const std::string output_filename_;
   const transform::Rigid3f transform_;
 
   // Only has one entry if we do not separate into floors.

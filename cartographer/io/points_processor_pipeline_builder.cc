@@ -20,6 +20,7 @@
 #include "cartographer/io/coloring_points_processor.h"
 #include "cartographer/io/counting_points_processor.h"
 #include "cartographer/io/fixed_ratio_sampling_points_processor.h"
+#include "cartographer/io/frame_id_filtering_points_processor.h"
 #include "cartographer/io/hybrid_grid_points_processor.h"
 #include "cartographer/io/intensity_to_color_points_processor.h"
 #include "cartographer/io/min_max_range_filtering_points_processor.h"
@@ -48,7 +49,7 @@ void RegisterPlainPointsProcessor(
 
 template <typename PointsProcessorType>
 void RegisterFileWritingPointsProcessor(
-    FileWriterFactory file_writer_factory,
+    const FileWriterFactory& file_writer_factory,
     PointsProcessorPipelineBuilder* const builder) {
   builder->Register(
       PointsProcessorType::kConfigurationFileActionName,
@@ -63,7 +64,7 @@ void RegisterFileWritingPointsProcessor(
 template <typename PointsProcessorType>
 void RegisterFileWritingPointsProcessorWithTrajectories(
     const std::vector<mapping::proto::Trajectory>& trajectories,
-    FileWriterFactory file_writer_factory,
+    const FileWriterFactory& file_writer_factory,
     PointsProcessorPipelineBuilder* const builder) {
   builder->Register(
       PointsProcessorType::kConfigurationFileActionName,
@@ -77,10 +78,11 @@ void RegisterFileWritingPointsProcessorWithTrajectories(
 
 void RegisterBuiltInPointsProcessors(
     const std::vector<mapping::proto::Trajectory>& trajectories,
-    FileWriterFactory file_writer_factory,
+    const FileWriterFactory& file_writer_factory,
     PointsProcessorPipelineBuilder* builder) {
   RegisterPlainPointsProcessor<CountingPointsProcessor>(builder);
   RegisterPlainPointsProcessor<FixedRatioSamplingPointsProcessor>(builder);
+  RegisterPlainPointsProcessor<FrameIdFilteringPointsProcessor>(builder);
   RegisterPlainPointsProcessor<MinMaxRangeFiteringPointsProcessor>(builder);
   RegisterPlainPointsProcessor<OutlierRemovingPointsProcessor>(builder);
   RegisterPlainPointsProcessor<ColoringPointsProcessor>(builder);
@@ -104,7 +106,7 @@ void PointsProcessorPipelineBuilder::Register(const std::string& name,
                                               FactoryFunction factory) {
   CHECK(factories_.count(name) == 0) << "A points processor named '" << name
                                      << "' has already been registered.";
-  factories_[name] = factory;
+  factories_[name] = std::move(factory);
 }
 
 PointsProcessorPipelineBuilder::PointsProcessorPipelineBuilder() {}
@@ -123,7 +125,7 @@ PointsProcessorPipelineBuilder::CreatePipeline(
 
   // We construct the pipeline starting at the back.
   for (auto it = configurations.rbegin(); it != configurations.rend(); it++) {
-    const string action = (*it)->GetString("action");
+    const std::string action = (*it)->GetString("action");
     auto factory_it = factories_.find(action);
     CHECK(factory_it != factories_.end())
         << "Unknown action '" << action

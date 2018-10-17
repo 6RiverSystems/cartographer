@@ -25,8 +25,8 @@
 #include "cartographer/common/math.h"
 #include "cartographer/io/draw_trajectories.h"
 #include "cartographer/io/image.h"
+#include "cartographer/mapping/3d/hybrid_grid.h"
 #include "cartographer/mapping/detect_floors.h"
-#include "cartographer/mapping_3d/hybrid_grid.h"
 #include "cartographer/transform/transform.h"
 
 namespace cartographer {
@@ -35,15 +35,15 @@ namespace {
 
 struct PixelData {
   size_t num_occupied_cells_in_column = 0;
-  double mean_r = 0.;
-  double mean_g = 0.;
-  double mean_b = 0.;
+  float mean_r = 0.;
+  float mean_g = 0.;
+  float mean_b = 0.;
 };
 
 using PixelDataMatrix =
     Eigen::Matrix<PixelData, Eigen::Dynamic, Eigen::Dynamic>;
 
-double Mix(const double a, const double b, const double t) {
+float Mix(const float a, const float b, const float t) {
   return a * (1. - t) + t * b;
 }
 
@@ -74,18 +74,10 @@ Image IntoImage(const PixelDataMatrix& mat) {
       // details like chairs and tables are still well visible.
       const float saturation =
           std::log(cell.num_occupied_cells_in_column) / max;
-      double mean_r_in_column = (cell.mean_r / 255.);
-      double mean_g_in_column = (cell.mean_g / 255.);
-      double mean_b_in_column = (cell.mean_b / 255.);
-
-      double mix_r = Mix(1., mean_r_in_column, saturation);
-      double mix_g = Mix(1., mean_g_in_column, saturation);
-      double mix_b = Mix(1., mean_b_in_column, saturation);
-
-      const uint8_t r = common::RoundToInt(mix_r * 255.);
-      const uint8_t g = common::RoundToInt(mix_g * 255.);
-      const uint8_t b = common::RoundToInt(mix_b * 255.);
-      image.SetPixel(x, y, {{r, g, b}});
+      const FloatColor color = {{Mix(1.f, cell.mean_r, saturation),
+                                 Mix(1.f, cell.mean_g, saturation),
+                                 Mix(1.f, cell.mean_b, saturation)}};
+      image.SetPixel(x, y, ToUint8Color(color));
     }
   }
   return image;
@@ -106,7 +98,8 @@ bool ContainedIn(const common::Time& time,
 XRayPointsProcessor::XRayPointsProcessor(
     const double voxel_size, const transform::Rigid3f& transform,
     const std::vector<mapping::Floor>& floors,
-    const DrawTrajectories& draw_trajectories, const string& output_filename,
+    const DrawTrajectories& draw_trajectories,
+    const std::string& output_filename,
     const std::vector<mapping::proto::Trajectory>& trajectories,
     FileWriterFactory file_writer_factory, PointsProcessor* const next)
     : draw_trajectories_(draw_trajectories),
@@ -118,7 +111,7 @@ XRayPointsProcessor::XRayPointsProcessor(
       transform_(transform) {
   for (size_t i = 0; i < (floors_.empty() ? 1 : floors.size()); ++i) {
     aggregations_.emplace_back(
-        Aggregation{mapping_3d::HybridGridBase<bool>(voxel_size), {}});
+        Aggregation{mapping::HybridGridBase<bool>(voxel_size), {}});
   }
 }
 
@@ -135,7 +128,7 @@ std::unique_ptr<XRayPointsProcessor> XRayPointsProcessor::FromDictionary(
                                      ? DrawTrajectories::kYes
                                      : DrawTrajectories::kNo;
   if (separate_floor) {
-    CHECK_EQ(trajectories.size(), 0)
+    CHECK_EQ(trajectories.size(), 1)
         << "Can only detect floors with a single trajectory.";
     floors = mapping::DetectFloors(trajectories.at(0));
   }
@@ -156,7 +149,8 @@ void XRayPointsProcessor::WriteVoxels(const Aggregation& aggregation,
   }
 
   // Returns the (x, y) pixel of the given 'index'.
-  const auto voxel_index_to_pixel = [this](const Eigen::Array3i& index) {
+  const auto voxel_index_to_pixel =
+      [this](const Eigen::Array3i& index) -> Eigen::Array2i {
     // We flip the y axis, since matrices rows are counted from the top.
     return Eigen::Array2i(bounding_box_.max()[1] - index[1],
                           bounding_box_.max()[2] - index[2]);
@@ -167,7 +161,7 @@ void XRayPointsProcessor::WriteVoxels(const Aggregation& aggregation,
   const int xsize = bounding_box_.sizes()[1] + 1;
   const int ysize = bounding_box_.sizes()[2] + 1;
   PixelDataMatrix pixel_data_matrix = PixelDataMatrix(ysize, xsize);
-  for (mapping_3d::HybridGridBase<bool>::Iterator it(aggregation.voxels);
+  for (mapping::HybridGridBase<bool>::Iterator it(aggregation.voxels);
        !it.Done(); it.Next()) {
     const Eigen::Array3i cell_index = it.GetCellIndex();
     const Eigen::Array2i pixel = voxel_index_to_pixel(cell_index);
@@ -200,7 +194,7 @@ void XRayPointsProcessor::WriteVoxels(const Aggregation& aggregation,
 
 void XRayPointsProcessor::Insert(const PointsBatch& batch,
                                  Aggregation* const aggregation) {
-  constexpr Color kDefaultColor = {{0, 0, 0}};
+  constexpr FloatColor kDefaultColor = {{0.f, 0.f, 0.f}};
   for (size_t i = 0; i < batch.points.size(); ++i) {
     const Eigen::Vector3f camera_point = transform_ * batch.points[i];
     const Eigen::Array3i cell_index =
@@ -224,7 +218,7 @@ void XRayPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
     Insert(*batch, &aggregations_[0]);
   } else {
     for (size_t i = 0; i < floors_.size(); ++i) {
-      if (!ContainedIn(batch->time, floors_[i].timespans)) {
+      if (!ContainedIn(batch->start_time, floors_[i].timespans)) {
         continue;
       }
       Insert(*batch, &aggregations_[i]);
