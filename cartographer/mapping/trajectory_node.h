@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "Eigen/Core"
+#include "absl/types/optional.h"
 #include "cartographer/common/time.h"
 #include "cartographer/mapping/proto/trajectory_node_data.pb.h"
 #include "cartographer/sensor/range_data.h"
@@ -28,6 +29,17 @@
 
 namespace cartographer {
 namespace mapping {
+
+struct TrajectoryNodePose {
+  struct ConstantPoseData {
+    common::Time time;
+    transform::Rigid3d local_pose;
+  };
+  // The node pose in the global SLAM frame.
+  transform::Rigid3d global_pose;
+
+  absl::optional<ConstantPoseData> constant_pose_data;
+};
 
 struct TrajectoryNode {
   struct Data {
